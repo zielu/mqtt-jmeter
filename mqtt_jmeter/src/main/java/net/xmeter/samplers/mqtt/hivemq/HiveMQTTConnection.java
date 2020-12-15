@@ -1,13 +1,5 @@
 package net.xmeter.samplers.mqtt.hivemq;
 
-import java.nio.ByteBuffer;
-import java.nio.charset.CharacterCodingException;
-import java.nio.charset.Charset;
-import java.nio.charset.CharsetDecoder;
-import java.util.List;
-import java.util.function.Consumer;
-import java.util.logging.Logger;
-
 import com.hivemq.client.mqtt.datatypes.MqttQos;
 import com.hivemq.client.mqtt.mqtt3.Mqtt3AsyncClient;
 import com.hivemq.client.mqtt.mqtt3.Mqtt3BlockingClient;
@@ -17,17 +9,25 @@ import com.hivemq.client.mqtt.mqtt3.message.subscribe.Mqtt3Subscribe;
 import com.hivemq.client.mqtt.mqtt3.message.subscribe.Mqtt3SubscribeBuilder;
 import com.hivemq.client.mqtt.mqtt3.message.subscribe.Mqtt3Subscription;
 import com.hivemq.client.mqtt.mqtt3.message.subscribe.suback.Mqtt3SubAckReturnCode;
-
-import net.xmeter.samplers.mqtt.MQTTClientException;
+import net.xmeter.samplers.mqtt.MQTTClientRuntimeException;
 import net.xmeter.samplers.mqtt.MQTTConnection;
 import net.xmeter.samplers.mqtt.MQTTPubResult;
 import net.xmeter.samplers.mqtt.MQTTQoS;
 import net.xmeter.samplers.mqtt.MQTTSubListener;
 
+import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.Charset;
+import java.nio.charset.CharsetDecoder;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.function.Consumer;
+import java.util.logging.Logger;
+
 class HiveMQTTConnection implements MQTTConnection {
     private static final Logger logger = Logger.getLogger(HiveMQTTConnection.class.getCanonicalName());
 
-    private static final Charset charset = Charset.forName("UTF-8");
+    private static final Charset charset = StandardCharsets.UTF_8;
     private static final CharsetDecoder decoder = charset.newDecoder();
 
     private final Mqtt3BlockingClient client;
@@ -88,17 +88,17 @@ class HiveMQTTConnection implements MQTTConnection {
 
         Mqtt3AsyncClient asyncClient = client.toAsync();
         asyncClient.subscribe(subscribe, this::handlePublishReceived).whenComplete((ack, error) -> {
+            List<Mqtt3SubAckReturnCode> ackCodes = ack.getReturnCodes();
+            for (int i = 0; i < ackCodes.size(); i++) {
+                Mqtt3SubAckReturnCode ackCode = ackCodes.get(i);
+                if (ackCode.isError()) {
+                    int index = i;
+                    logger.warning(() -> "Failed to subscribe " + topicNames[index] + " code: " + ackCode.name());
+                }
+            }
             if (error != null) {
                 onFailure.accept(error);
             } else {
-                List<Mqtt3SubAckReturnCode> ackCodes = ack.getReturnCodes();
-                for (int i = 0; i < ackCodes.size(); i++) {
-                    Mqtt3SubAckReturnCode ackCode = ackCodes.get(i);
-                    if (ackCode.isError()) {
-                        int index = i;
-                        logger.warning(() -> "Failed to subscribe " + topicNames[index] + " code: " + ackCode.name());
-                    }
-                }
                 onSuccess.run();
             }
         });
@@ -114,7 +114,7 @@ class HiveMQTTConnection implements MQTTConnection {
         try {
             return decoder.decode(value).toString();
         } catch (CharacterCodingException e) {
-            throw new RuntimeException(new MQTTClientException("Failed to decode", e));
+            throw new MQTTClientRuntimeException("Failed to decode", e);
         }
     }
 

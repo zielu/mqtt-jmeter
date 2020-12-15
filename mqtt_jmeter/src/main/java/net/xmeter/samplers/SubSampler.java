@@ -1,5 +1,13 @@
 package net.xmeter.samplers;
 
+import net.xmeter.SubBean;
+import net.xmeter.samplers.mqtt.MQTTConnection;
+import net.xmeter.samplers.mqtt.MQTTQoS;
+import org.apache.jmeter.samplers.Entry;
+import org.apache.jmeter.samplers.SampleResult;
+import org.apache.jmeter.threads.JMeterContextService;
+import org.apache.jmeter.threads.JMeterVariables;
+
 import java.text.MessageFormat;
 import java.util.HashSet;
 import java.util.List;
@@ -8,15 +16,6 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-
-import org.apache.jmeter.samplers.Entry;
-import org.apache.jmeter.samplers.SampleResult;
-import org.apache.jmeter.threads.JMeterContextService;
-import org.apache.jmeter.threads.JMeterVariables;
-
-import net.xmeter.SubBean;
-import net.xmeter.samplers.mqtt.MQTTConnection;
-import net.xmeter.samplers.mqtt.MQTTQoS;
 
 @SuppressWarnings("deprecation")
 public class SubSampler extends AbstractMQTTSampler {
@@ -222,13 +221,17 @@ public class SubSampler extends AbstractMQTTSampler {
 			logger.severe("Specified invalid QoS value, set to default QoS value " + qos);
 			qos = QOS_0;
 		}
-
-		connection.subscribe(paraTopics, MQTTQoS.fromValue(qos), () -> {
-			logger.fine(() -> "sub successful, topic length is " + paraTopics.length);
-		}, error -> {
-			logger.log(Level.INFO, "subscribe failed", error);
+		if (paraTopics.length == 0) {
+			logger.severe("Specified empty topics list");
 			subFailed = true;
-		});
+		} else {
+			connection.subscribe(paraTopics, MQTTQoS.fromValue(qos), () -> {
+				logger.fine(() -> "sub successful, topic length is " + paraTopics.length);
+			}, error -> {
+				logger.log(Level.INFO, "subscribe failed", error);
+				subFailed = true;
+			});
+		}
 	}
 	
 	private void setListener(final boolean sampleByTime, final int sampleCount) {
