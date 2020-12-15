@@ -9,26 +9,19 @@ import com.hivemq.client.mqtt.mqtt3.message.subscribe.Mqtt3Subscribe;
 import com.hivemq.client.mqtt.mqtt3.message.subscribe.Mqtt3SubscribeBuilder;
 import com.hivemq.client.mqtt.mqtt3.message.subscribe.Mqtt3Subscription;
 import com.hivemq.client.mqtt.mqtt3.message.subscribe.suback.Mqtt3SubAckReturnCode;
-import net.xmeter.samplers.mqtt.MQTTClientRuntimeException;
 import net.xmeter.samplers.mqtt.MQTTConnection;
 import net.xmeter.samplers.mqtt.MQTTPubResult;
 import net.xmeter.samplers.mqtt.MQTTQoS;
 import net.xmeter.samplers.mqtt.MQTTSubListener;
 
 import java.nio.ByteBuffer;
-import java.nio.charset.CharacterCodingException;
-import java.nio.charset.Charset;
-import java.nio.charset.CharsetDecoder;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.function.Consumer;
 import java.util.logging.Logger;
 
 class HiveMQTTConnection implements MQTTConnection {
     private static final Logger logger = Logger.getLogger(HiveMQTTConnection.class.getCanonicalName());
-
-    private static final Charset charset = StandardCharsets.UTF_8;
-    private static final CharsetDecoder decoder = charset.newDecoder();
+    private static final ByteBuffer EMPTY_BUFFER = ByteBuffer.allocate(0);
 
     private final Mqtt3BlockingClient client;
     private final String clientId;
@@ -105,17 +98,7 @@ class HiveMQTTConnection implements MQTTConnection {
     }
 
     private void handlePublishReceived(Mqtt3Publish received) {
-        String topic = decode(received.getTopic().toByteBuffer());
-        String payload = received.getPayload().map(this::decode).orElse("");
-        this.listener.accept(topic, payload, () -> {});
-    }
-
-    private String decode(ByteBuffer value) {
-        try {
-            return decoder.decode(value).toString();
-        } catch (CharacterCodingException e) {
-            throw new MQTTClientRuntimeException("Failed to decode", e);
-        }
+        this.listener.accept(received.getTopic().toByteBuffer(), received.getPayload().orElse(EMPTY_BUFFER), () -> {});
     }
 
     @Override

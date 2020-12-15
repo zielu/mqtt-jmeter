@@ -1,25 +1,24 @@
 package net.xmeter.samplers;
 
-import java.text.MessageFormat;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-
-import javax.xml.bind.DatatypeConverter;
-
+import net.xmeter.Util;
+import net.xmeter.samplers.mqtt.MQTTConnection;
+import net.xmeter.samplers.mqtt.MQTTPubResult;
+import net.xmeter.samplers.mqtt.MQTTQoS;
 import org.apache.jmeter.samplers.Entry;
 import org.apache.jmeter.samplers.SampleResult;
 import org.apache.jmeter.threads.JMeterContextService;
 import org.apache.jmeter.threads.JMeterVariables;
 
-import net.xmeter.Util;
-import net.xmeter.samplers.mqtt.MQTTConnection;
-import net.xmeter.samplers.mqtt.MQTTPubResult;
-import net.xmeter.samplers.mqtt.MQTTQoS;
+import javax.xml.bind.DatatypeConverter;
+import java.text.MessageFormat;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class PubSampler extends AbstractMQTTSampler {
 	private static final long serialVersionUID = 4312341622759500786L;
 	private static final Logger logger = Logger.getLogger(PubSampler.class.getCanonicalName());
-	
+	private static final byte[] PUBLISH_SUCCESS = "Publish successfully.".getBytes();
+
 	private transient MQTTConnection connection = null;
 	private String payload = null;
 	private MQTTQoS qos_enum = MQTTQoS.AT_MOST_ONCE;
@@ -161,7 +160,7 @@ public class PubSampler extends AbstractMQTTSampler {
 			result.setSuccessful(pubResult.isSuccessful());
 			
 			if(pubResult.isSuccessful()) {
-				result.setResponseData("Publish successfuly.".getBytes());
+				result.setResponseData(PUBLISH_SUCCESS);
 				result.setResponseMessage(MessageFormat.format("publish successfully for Connection {0}.", connection));
 				result.setResponseCodeOK();	
 			} else {
@@ -169,12 +168,16 @@ public class PubSampler extends AbstractMQTTSampler {
 				result.setResponseMessage(MessageFormat.format("Publish failed for connection {0}.", connection));
 				result.setResponseData(MessageFormat.format("Client [{0}] publish failed: {1}", (clientId == null ? "null" : clientId), pubResult.getError().orElse("")).getBytes());
 				result.setResponseCode("501");
-				logger.info(MessageFormat.format("** [clientId: {0}, topic: {1}, payload: {2}] Publish failed for connection {3}.", (clientId == null ? "null" : clientId),
-						topicName, new String(toSend), connection));
+				if (logger.isLoggable(Level.INFO)) {
+					logger.info(
+							MessageFormat.format("** [clientId: {0}, topic: {1}, payload: {2}] Publish failed for connection {3}.",
+									(clientId == null ? "null" : clientId),
+									topicName, new String(toSend), connection));
+				}
 				pubResult.getError().ifPresent(logger::info);
 			}
 		} catch (Exception ex) {
-			logger.log(Level.SEVERE, "Publish failed for connection " + connection, ex);
+			logger.log(Level.SEVERE, ex, () -> "Publish failed for connection " + connection);
 			if (result.getEndTime() == 0) result.sampleEnd();
 			result.setLatency(result.getEndTime() - result.getStartTime());
 			result.setSuccessful(false);
@@ -182,8 +185,10 @@ public class PubSampler extends AbstractMQTTSampler {
 			result.setResponseData(MessageFormat.format("Client [{0}] publish failed: {1}", (clientId == null ? "null" : clientId), ex.getMessage()).getBytes());
 			result.setResponseCode("502");
 			if (logger.isLoggable(Level.INFO)) {
-				logger.info(MessageFormat.format("** [clientId: {0}, topic: {1}, payload: {2}] Publish failed for connection {3}.", (clientId == null ? "null" : clientId),
-						topicName, new String(toSend), connection));
+				logger.info(
+						MessageFormat.format("** [clientId: {0}, topic: {1}, payload: {2}] Publish failed for connection {3}.",
+								(clientId == null ? "null" : clientId),
+								topicName, new String(toSend), connection));
 			}
 		}
 		return result;

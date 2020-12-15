@@ -1,11 +1,5 @@
 package net.xmeter.samplers.mqtt.hivemq;
 
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-
 import com.hivemq.client.mqtt.MqttClientSslConfig;
 import com.hivemq.client.mqtt.MqttWebSocketConfig;
 import com.hivemq.client.mqtt.MqttWebSocketConfigBuilder;
@@ -17,18 +11,23 @@ import com.hivemq.client.mqtt.mqtt3.message.auth.Mqtt3SimpleAuth;
 import com.hivemq.client.mqtt.mqtt3.message.auth.Mqtt3SimpleAuthBuilder;
 import com.hivemq.client.mqtt.mqtt3.message.connect.Mqtt3ConnectBuilder;
 import com.hivemq.client.mqtt.mqtt3.message.connect.connack.Mqtt3ConnAck;
-
 import net.xmeter.samplers.mqtt.ConnectionParameters;
 import net.xmeter.samplers.mqtt.MQTTClient;
 import net.xmeter.samplers.mqtt.MQTTClientException;
 import net.xmeter.samplers.mqtt.MQTTConnection;
+
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 class HiveMQTTClient implements MQTTClient {
     private static final Logger logger = Logger.getLogger(HiveMQTTClient.class.getCanonicalName());
     private final ConnectionParameters parameters;
     private final Mqtt3BlockingClient client;
 
-    HiveMQTTClient(ConnectionParameters parameters) throws Exception {
+    HiveMQTTClient(ConnectionParameters parameters) {
         this.parameters = parameters;
         Mqtt3ClientBuilder mqtt3ClientBuilder = Mqtt3Client.builder()
                 .identifier(parameters.getClientId())
@@ -39,8 +38,7 @@ class HiveMQTTClient implements MQTTClient {
                 .buildBlocking();
     }
 
-    private Mqtt3ClientBuilder applyAdditionalConfig(Mqtt3ClientBuilder builder, ConnectionParameters parameters)
-            throws Exception {
+    private Mqtt3ClientBuilder applyAdditionalConfig(Mqtt3ClientBuilder builder, ConnectionParameters parameters) {
         if (parameters.getReconnectMaxAttempts() > 0) {
             builder = builder.automaticReconnect(MqttClientAutoReconnect.builder().build());
         }
@@ -51,7 +49,7 @@ class HiveMQTTClient implements MQTTClient {
         if (parameters.isWebSocketProtocol()) {
             MqttWebSocketConfigBuilder wsConfigBuilder = MqttWebSocketConfig.builder();
             if (parameters.getPath() != null) {
-                wsConfigBuilder.serverPath(parameters.getPath());
+                wsConfigBuilder = wsConfigBuilder.serverPath(parameters.getPath());
             }
             builder = builder.webSocketConfig(wsConfigBuilder.build());
         }
@@ -82,7 +80,7 @@ class HiveMQTTClient implements MQTTClient {
             try {
                 client.disconnect();
             } catch (Exception e) {
-                logger.log(Level.FINE, "Disconnect on timeout failed " + client, e);
+                logger.log(Level.FINE, e, () -> "Disconnect on timeout failed " + client);
             }
             throw new MQTTClientException("Connection timeout " + client, timeoutException);
         }
@@ -93,7 +91,7 @@ class HiveMQTTClient implements MQTTClient {
             Mqtt3SimpleAuthBuilder.Complete simpleAuth = Mqtt3SimpleAuth.builder()
                     .username(parameters.getUsername());
             if (parameters.getPassword() != null) {
-                simpleAuth.password(parameters.getPassword().getBytes());
+                simpleAuth = simpleAuth.password(parameters.getPassword().getBytes());
             }
             return simpleAuth.build();
         }

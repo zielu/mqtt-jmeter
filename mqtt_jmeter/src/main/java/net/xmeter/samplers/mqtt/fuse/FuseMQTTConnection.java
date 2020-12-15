@@ -1,13 +1,10 @@
 package net.xmeter.samplers.mqtt.fuse;
 
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.util.concurrent.Semaphore;
-import java.util.concurrent.TimeUnit;
-import java.util.function.Consumer;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-
+import net.xmeter.samplers.PubCallback;
+import net.xmeter.samplers.mqtt.MQTTConnection;
+import net.xmeter.samplers.mqtt.MQTTPubResult;
+import net.xmeter.samplers.mqtt.MQTTQoS;
+import net.xmeter.samplers.mqtt.MQTTSubListener;
 import org.fusesource.hawtbuf.Buffer;
 import org.fusesource.hawtbuf.UTF8Buffer;
 import org.fusesource.mqtt.client.Callback;
@@ -15,11 +12,11 @@ import org.fusesource.mqtt.client.CallbackConnection;
 import org.fusesource.mqtt.client.Listener;
 import org.fusesource.mqtt.client.QoS;
 
-import net.xmeter.samplers.PubCallback;
-import net.xmeter.samplers.mqtt.MQTTConnection;
-import net.xmeter.samplers.mqtt.MQTTPubResult;
-import net.xmeter.samplers.mqtt.MQTTQoS;
-import net.xmeter.samplers.mqtt.MQTTSubListener;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 class FuseMQTTConnection implements MQTTConnection {
     private static final Logger logger = Logger.getLogger(FuseMQTTConnection.class.getCanonicalName());
@@ -96,15 +93,7 @@ class FuseMQTTConnection implements MQTTConnection {
         callbackConnection.listener(new Listener() {
             @Override
             public void onPublish(UTF8Buffer topic, Buffer body, Runnable ack) {
-                try {
-                    ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                    body.writeTo(baos);
-                    String msg = baos.toString();
-
-                    listener.accept(topic.toString(), msg, ack);
-                } catch (IOException e) {
-                    logger.severe(e.getMessage());
-                }
+                listener.accept(topic.toByteBuffer(), body.toByteBuffer(), ack);
             }
 
             @Override
