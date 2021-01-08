@@ -1,21 +1,20 @@
 package net.xmeter.samplers;
 
-import java.text.MessageFormat;
-import java.util.HashSet;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-
-import org.apache.jmeter.samplers.Entry;
-import org.apache.jmeter.samplers.SampleResult;
-import org.apache.jmeter.threads.JMeterContextService;
-import org.apache.jmeter.threads.JMeterVariables;
-
 import net.xmeter.Util;
 import net.xmeter.samplers.mqtt.ConnectionParameters;
 import net.xmeter.samplers.mqtt.MQTT;
 import net.xmeter.samplers.mqtt.MQTTClient;
 import net.xmeter.samplers.mqtt.MQTTConnection;
 import net.xmeter.samplers.mqtt.MQTTSsl;
+import org.apache.jmeter.samplers.Entry;
+import org.apache.jmeter.samplers.SampleResult;
+import org.apache.jmeter.threads.JMeterContextService;
+import org.apache.jmeter.threads.JMeterVariables;
+
+import java.text.MessageFormat;
+import java.util.HashSet;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class ConnectSampler extends AbstractMQTTSampler {
 	private static final long serialVersionUID = 1859006013465470528L;
@@ -76,7 +75,7 @@ public class ConnectSampler extends AbstractMQTTSampler {
 				parameters.setSsl(ssl);
 			}
 		} catch (Exception e) {
-			logger.log(Level.SEVERE, "Failed to establish Connection " + connection , e);
+			logger.log(Level.SEVERE, e, () -> "Failed to establish Connection " + connection);
 			result.setSuccessful(false);
 			result.setResponseMessage(MessageFormat.format("Failed to establish Connection {0}. Please check SSL authentication info.", connection));
 			result.setResponseData("Failed to establish Connection. Please check SSL authentication info.".getBytes());
@@ -102,12 +101,12 @@ public class ConnectSampler extends AbstractMQTTSampler {
 			} else {
 				result.setSuccessful(false);
 				result.setResponseMessage(MessageFormat.format("Failed to establish Connection {0}.", connection));
-				result.setResponseData(MessageFormat.format("Client [{0}] failed. Couldn't establish connection.",
+				result.setResponseData(MessageFormat.format("Client [{0}] failed. Could not establish connection.",
 						client.getClientId()).getBytes());
 				result.setResponseCode("501");
 			}
 		} catch (Exception e) {
-			logger.log(Level.SEVERE, "Failed to establish Connection " + connection , e);
+			logger.log(Level.SEVERE, e, () -> "Failed to establish Connection " + connection);
 			if (result.getEndTime() == 0) result.sampleEnd(); //avoid re-enter sampleEnd()
 			result.setSuccessful(false);
 			result.setResponseMessage(MessageFormat.format("Failed to establish Connection {0}.", connection));

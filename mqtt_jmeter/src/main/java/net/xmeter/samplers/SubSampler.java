@@ -29,17 +29,17 @@ public class SubSampler extends AbstractMQTTSampler {
 	private static final Logger logger = Logger.getLogger(SubSampler.class.getCanonicalName());
 
 	private static final Charset charset = StandardCharsets.UTF_8;
-	private final CharsetDecoder decoder = charset.newDecoder();
-	
+	private final transient CharsetDecoder decoder = charset.newDecoder();
+
+	private final transient Deque<SubBean> batches = new ConcurrentLinkedDeque<>();
 	private transient MQTTConnection connection = null;
 	private transient String clientId;
 	private boolean subFailed = false;
-	
+
 	private boolean sampleByTime = true; // initial values
-	private int sampleElapsedTime = 1000; 
+	private int sampleElapsedTime = 1000;
 	private int sampleCount = 1;
 
-	private transient Deque<SubBean> batches = new ConcurrentLinkedDeque<>();
 	private boolean printFlag = false;
 
 	private final transient Object dataLock = new Object();
@@ -130,7 +130,6 @@ public class SubSampler extends AbstractMQTTSampler {
 		}
 		
 		final String topicsName= getTopics();
-		setListener(sampleByTime, sampleCount);
 		Set<String> topics = topicSubscribed.get(clientId);
 		if (topics == null) {
 			if (logger.isLoggable(Level.SEVERE)) {
@@ -152,7 +151,8 @@ public class SubSampler extends AbstractMQTTSampler {
 		if (subFailed) {
 			return fillFailedResult(result, "501", "Failed to subscribe to topic(s):" + topicsName);
 		}
-		
+
+		SubBean bean = null;
 		if(sampleByTime) {
 			try {
 				TimeUnit.MILLISECONDS.sleep(sampleElapsedTime);
@@ -161,33 +161,33 @@ public class SubSampler extends AbstractMQTTSampler {
 				Thread.currentThread().interrupt();
 			}
 			synchronized (dataLock) {
-				result.sampleStart();
-				return produceResult(result, topicsName);
+				bean = batches.poll();
 			}
 		} else {
 			synchronized (dataLock) {
-				int receivedCount1 = (batches.isEmpty() ? 0 : batches.element().getReceivedCount());
-				boolean needWait = false;
-				if(receivedCount1 < sampleCount) {
-					needWait = true;
-				}
-				
-				if(needWait) {
+				while (needWaitForSampleCount()) {
 					try {
 						dataLock.wait();
+						bean = batches.poll();
 					} catch (InterruptedException e) {
 						logger.log(Level.INFO, "Received exception when waiting for notification signal", e);
 						Thread.currentThread().interrupt();
 					}
 				}
-				result.sampleStart();
-				return produceResult(result, topicsName);
 			}
 		}
+		resetListener();
+		result.sampleStart();
+		produceResult(bean, result, topicsName);
+		return result;
+	}
+
+	private boolean needWaitForSampleCount() {
+		int receivedCount = (batches.isEmpty() ? 0 : batches.element().getReceivedCount());
+		return receivedCount < sampleCount;
 	}
 	
-	private SampleResult produceResult(SampleResult result, String topicName) {
-		SubBean bean = batches.poll();
+	private void produceResult(SubBean bean, SampleResult result, String topicName) {
 		if(bean == null) { // In "elapsed time" mode, return "dummy" when time is reached
 			bean = new SubBean();
 		}
@@ -217,11 +217,10 @@ public class SubSampler extends AbstractMQTTSampler {
 			}
 		}
 		result.setSampleCount(receivedCount);
-
-		return result;
 	}
 	
 	private void listenToTopics(final String topicsName) {
+		setListener(sampleByTime, sampleCount);
 		int qos;
 		try {
 			qos = Integer.parseInt(getQOS());
@@ -268,6 +267,10 @@ public class SubSampler extends AbstractMQTTSampler {
 			}
 		}));
 	}
+
+	private void resetListener() {
+		connection.setSubListener(null);
+	}
 	
 	private SubBean handleSubBean(boolean sampleByTime, ByteBuffer msg, int sampleCount) {
 		SubBean bean;
@@ -277,8 +280,9 @@ public class SubSampler extends AbstractMQTTSampler {
 		} else {
 			bean = batches.peekLast();
 		}
-		
-		if((!sampleByTime) && (bean.getReceivedCount() == sampleCount)) { //Create a new batch when latest bean is full.
+
+		int receivedCount = bean.getReceivedCount();
+		if((!sampleByTime) && (receivedCount == sampleCount)) { //Create a new batch when latest bean is full.
 			logger.info("The tail bean is full, will create a new bean for it.");
 			bean = new SubBean();
 			batches.add(bean);
@@ -294,7 +298,6 @@ public class SubSampler extends AbstractMQTTSampler {
 				long elapsed = System.currentTimeMillis() - start;
 				
 				double avgElapsedTime = bean.getAvgElapsedTime();
-				int receivedCount = bean.getReceivedCount();
 				avgElapsedTime = (avgElapsedTime * receivedCount + elapsed) / (receivedCount + 1);
 				bean.setAvgElapsedTime(avgElapsedTime);
 			}
@@ -303,7 +306,7 @@ public class SubSampler extends AbstractMQTTSampler {
 			bean.getContents().add(decode(msg));
 		}
 		bean.setReceivedMessageSize(bean.getReceivedMessageSize() + msg.limit());
-		bean.setReceivedCount(bean.getReceivedCount() + 1);
+		bean.setReceivedCount(receivedCount + 1);
 		return bean;
 	}
 

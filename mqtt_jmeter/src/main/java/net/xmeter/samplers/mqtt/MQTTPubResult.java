@@ -3,6 +3,8 @@ package net.xmeter.samplers.mqtt;
 import java.util.Optional;
 
 public class MQTTPubResult {
+    public static MQTTPubResult SUCCESS = new MQTTPubResult(true);
+
     private final boolean successful;
     private String error;
 

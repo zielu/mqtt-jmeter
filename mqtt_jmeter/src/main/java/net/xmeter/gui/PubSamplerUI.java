@@ -1,14 +1,7 @@
 package net.xmeter.gui;
 
-import java.awt.BorderLayout;
-import java.util.logging.Logger;
-
-import javax.swing.BorderFactory;
-import javax.swing.JCheckBox;
-import javax.swing.JPanel;
-import javax.swing.event.ChangeEvent;
-import javax.swing.event.ChangeListener;
-
+import net.xmeter.Constants;
+import net.xmeter.samplers.PubSampler;
 import org.apache.jmeter.gui.util.HorizontalPanel;
 import org.apache.jmeter.gui.util.JSyntaxTextArea;
 import org.apache.jmeter.gui.util.JTextScrollPane;
@@ -18,8 +11,11 @@ import org.apache.jmeter.testelement.TestElement;
 import org.apache.jorphan.gui.JLabeledChoice;
 import org.apache.jorphan.gui.JLabeledTextField;
 
-import net.xmeter.Constants;
-import net.xmeter.samplers.PubSampler;
+import javax.swing.*;
+import javax.swing.event.ChangeEvent;
+import javax.swing.event.ChangeListener;
+import java.awt.*;
+import java.util.logging.Logger;
 
 public class PubSamplerUI extends AbstractSamplerGui implements Constants, ChangeListener {
 	private static final long serialVersionUID = 2479085966683186422L;
@@ -136,7 +132,7 @@ public class PubSamplerUI extends AbstractSamplerGui implements Constants, Chang
 		}
 		
 		this.topicName.setText(sampler.getTopic());
-		this.retainedMsg.setText(sampler.getRetainedMessage().toString());
+		this.retainedMsg.setText(Boolean.toString(sampler.getRetainedMessage()));
 		this.timestamp.setSelected(sampler.isAddTimestamp());
 		if(MESSAGE_TYPE_STRING.equalsIgnoreCase(sampler.getMessageType())) {
 			this.messageTypes.setSelectedIndex(0);	

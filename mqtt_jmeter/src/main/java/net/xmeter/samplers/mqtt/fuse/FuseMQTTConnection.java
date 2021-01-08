@@ -1,6 +1,6 @@
 package net.xmeter.samplers.mqtt.fuse;
 
-import net.xmeter.samplers.PubCallback;
+import net.xmeter.samplers.mqtt.MQTTClientException;
 import net.xmeter.samplers.mqtt.MQTTConnection;
 import net.xmeter.samplers.mqtt.MQTTPubResult;
 import net.xmeter.samplers.mqtt.MQTTQoS;
@@ -12,6 +12,8 @@ import org.fusesource.mqtt.client.CallbackConnection;
 import org.fusesource.mqtt.client.Listener;
 import org.fusesource.mqtt.client.QoS;
 
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
@@ -25,6 +27,28 @@ class FuseMQTTConnection implements MQTTConnection {
     private final String clientId;
     private final ConnectionCallback connectionCallback;
     private final CallbackConnection callbackConnection;
+
+    private final Listener nullListener = new Listener() {
+        @Override
+        public void onConnected() {
+            logger.fine(() -> "Connected client: " + clientId);
+        }
+
+        @Override
+        public void onDisconnected() {
+            logger.fine(() -> "Disconnected client: " + clientId);
+        }
+
+        @Override
+        public void onPublish(UTF8Buffer utf8Buffer, Buffer buffer, Runnable runnable) {
+
+        }
+
+        @Override
+        public void onFailure(Throwable throwable) {
+            logger.log(Level.SEVERE, "Sub listener failure", throwable);
+        }
+    };
 
     FuseMQTTConnection(String clientId, ConnectionCallback connectionCallback, CallbackConnection callbackConnection) {
         this.clientId = clientId;
@@ -43,7 +67,7 @@ class FuseMQTTConnection implements MQTTConnection {
     }
 
     @Override
-    public void disconnect() throws Exception {
+    public void disconnect() throws MQTTClientException {
         callbackConnection.disconnect(new Callback<Void>() {
             @Override
             public void onSuccess(Void aVoid) {
@@ -56,11 +80,16 @@ class FuseMQTTConnection implements MQTTConnection {
                 disconnectLock.release();
             }
         });
-        disconnectLock.tryAcquire(30, TimeUnit.SECONDS);
+        try {
+            disconnectLock.tryAcquire(30, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new MQTTClientException("Disconnect timeout", e);
+        }
     }
 
     @Override
-    public MQTTPubResult publish(String topicName, byte[] message, MQTTQoS qos, boolean retained) {
+    public CompletionStage<MQTTPubResult> publish(String topicName, byte[] message, MQTTQoS qos, boolean retained) {
         final Object pubLock = new Object();
         QoS fuseQos = FuseUtil.map(qos);
         PubCallback pubCallback = new PubCallback(pubLock, fuseQos);
@@ -76,9 +105,9 @@ class FuseMQTTConnection implements MQTTConnection {
                     pubLock.wait();
                 }
             }
-            return new MQTTPubResult(pubCallback.isSuccessful(), pubCallback.getErrorMessage());
+            return CompletableFuture.completedFuture(new MQTTPubResult(pubCallback.isSuccessful(), pubCallback.getErrorMessage()));
         } catch (Exception exception) {
-            return new MQTTPubResult(false, exception.getMessage());
+            return CompletableFuture.completedFuture(new MQTTPubResult(false, exception.getMessage()));
         }
     }
 
@@ -90,25 +119,31 @@ class FuseMQTTConnection implements MQTTConnection {
 
     @Override
     public void setSubListener(MQTTSubListener listener) {
-        callbackConnection.listener(new Listener() {
-            @Override
-            public void onPublish(UTF8Buffer topic, Buffer body, Runnable ack) {
-                listener.accept(topic.toByteBuffer(), body.toByteBuffer(), ack);
-            }
+        if (listener == null) {
+            callbackConnection.listener(nullListener);
+        } else {
+            callbackConnection.listener(new Listener() {
+                @Override
+                public void onPublish(UTF8Buffer topic, Buffer body, Runnable ack) {
+                    listener.accept(topic.toByteBuffer(), body.toByteBuffer(), ack);
+                }
 
-            @Override
-            public void onFailure(Throwable value) {
-                logger.log(Level.SEVERE, "Sub listener failure", value);
-            }
+                @Override
+                public void onFailure(Throwable value) {
+                    logger.log(Level.SEVERE, "Sub listener failure", value);
+                }
 
-            @Override
-            public void onDisconnected() {
-            }
+                @Override
+                public void onDisconnected() {
+                    logger.fine(() -> "Disconnected client: " + clientId);
+                }
 
-            @Override
-            public void onConnected() {
-            }
-        });
+                @Override
+                public void onConnected() {
+                    logger.fine(() -> "Connected client: " + clientId);
+                }
+            });
+        }
     }
 
     @Override

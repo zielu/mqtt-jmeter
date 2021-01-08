@@ -4,7 +4,7 @@ import com.hivemq.client.mqtt.MqttClientSslConfig;
 import com.hivemq.client.mqtt.MqttWebSocketConfig;
 import com.hivemq.client.mqtt.MqttWebSocketConfigBuilder;
 import com.hivemq.client.mqtt.lifecycle.MqttClientAutoReconnect;
-import com.hivemq.client.mqtt.mqtt3.Mqtt3BlockingClient;
+import com.hivemq.client.mqtt.mqtt3.Mqtt3AsyncClient;
 import com.hivemq.client.mqtt.mqtt3.Mqtt3Client;
 import com.hivemq.client.mqtt.mqtt3.Mqtt3ClientBuilder;
 import com.hivemq.client.mqtt.mqtt3.message.auth.Mqtt3SimpleAuth;
@@ -18,14 +18,13 @@ import net.xmeter.samplers.mqtt.MQTTConnection;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 class HiveMQTTClient implements MQTTClient {
     private static final Logger logger = Logger.getLogger(HiveMQTTClient.class.getCanonicalName());
     private final ConnectionParameters parameters;
-    private final Mqtt3BlockingClient client;
+    private final Mqtt3AsyncClient client;
 
     HiveMQTTClient(ConnectionParameters parameters) {
         this.parameters = parameters;
@@ -35,7 +34,7 @@ class HiveMQTTClient implements MQTTClient {
                 .serverPort(parameters.getPort());
         mqtt3ClientBuilder = applyAdditionalConfig(mqtt3ClientBuilder, parameters);
         client = mqtt3ClientBuilder
-                .buildBlocking();
+                .buildAsync();
     }
 
     private Mqtt3ClientBuilder applyAdditionalConfig(Mqtt3ClientBuilder builder, ConnectionParameters parameters) {
@@ -51,8 +50,12 @@ class HiveMQTTClient implements MQTTClient {
             if (parameters.getPath() != null) {
                 wsConfigBuilder = wsConfigBuilder.serverPath(parameters.getPath());
             }
+            wsConfigBuilder = wsConfigBuilder.handshakeTimeout(parameters.getConnectTimeout(), TimeUnit.SECONDS);
             builder = builder.webSocketConfig(wsConfigBuilder.build());
         }
+        builder = builder.transportConfig()
+                .mqttConnectTimeout(parameters.getConnectTimeout(), TimeUnit.SECONDS)
+                .applyTransportConfig();
         return builder;
     }
 
@@ -63,7 +66,7 @@ class HiveMQTTClient implements MQTTClient {
 
     @Override
     public MQTTConnection connect() throws Exception {
-        Mqtt3ConnectBuilder.Send<CompletableFuture<Mqtt3ConnAck>> connectSend = client.toAsync().connectWith()
+        Mqtt3ConnectBuilder.Send<CompletableFuture<Mqtt3ConnAck>> connectSend = client.connectWith()
                 .cleanSession(parameters.isCleanSession())
                 .keepAlive(parameters.getKeepAlive());
         Mqtt3SimpleAuth auth = createAuth();
@@ -73,16 +76,16 @@ class HiveMQTTClient implements MQTTClient {
         logger.info(() -> "Connect client: " + parameters.getClientId());
         CompletableFuture<Mqtt3ConnAck> connectFuture = connectSend.send();
         try {
-            Mqtt3ConnAck connAck = connectFuture.get(parameters.getConnectTimeout(), TimeUnit.SECONDS);
+            Mqtt3ConnAck connAck = connectFuture.get();
             logger.info(() -> "Connected client: " + parameters.getClientId());
             return new HiveMQTTConnection(client, parameters.getClientId(), connAck);
-        } catch (TimeoutException timeoutException) {
+        } catch (Exception ex) {
             try {
-                client.disconnect();
+                client.disconnect().get();
             } catch (Exception e) {
-                logger.log(Level.FINE, e, () -> "Disconnect on timeout failed " + client);
+                logger.log(Level.FINE, e, () -> "Disconnect on error failed " + client);
             }
-            throw new MQTTClientException("Connection timeout " + client, timeoutException);
+            throw new MQTTClientException("Connection error " + client, ex);
         }
     }
 

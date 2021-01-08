@@ -1,15 +1,5 @@
 package net.xmeter.samplers;
 
-import java.text.MessageFormat;
-import java.util.Vector;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-
-import org.apache.jmeter.samplers.Entry;
-import org.apache.jmeter.samplers.SampleResult;
-import org.apache.jmeter.threads.JMeterContextService;
-import org.apache.jmeter.threads.JMeterVariables;
-
 import net.xmeter.Util;
 import net.xmeter.samplers.mqtt.ConnectionParameters;
 import net.xmeter.samplers.mqtt.MQTT;
@@ -17,6 +7,15 @@ import net.xmeter.samplers.mqtt.MQTTClient;
 import net.xmeter.samplers.mqtt.MQTTConnection;
 import net.xmeter.samplers.mqtt.MQTTQoS;
 import net.xmeter.samplers.mqtt.MQTTSsl;
+import org.apache.jmeter.samplers.Entry;
+import org.apache.jmeter.samplers.SampleResult;
+import org.apache.jmeter.threads.JMeterContextService;
+import org.apache.jmeter.threads.JMeterVariables;
+
+import java.text.MessageFormat;
+import java.util.Vector;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class EfficientConnectSampler extends AbstractMQTTSampler {
 
@@ -118,7 +117,7 @@ public class EfficientConnectSampler extends AbstractMQTTSampler {
 //				failedConnCount += 1;
 				subResult.setSuccessful(false);
 				subResult.setResponseMessage("Failed to establish Connections.");
-				subResult.setResponseData(MessageFormat.format("Client [{0}] failed with exception.", clientId));
+				subResult.setResponseData(MessageFormat.format("Client [{0}] failed with exception.", clientId).getBytes());
 				subResult.setResponseCode("502");
 			} finally {
 				totalSampleCount += subResult.getSampleCount();
@@ -199,7 +198,9 @@ public class EfficientConnectSampler extends AbstractMQTTSampler {
 		final String[] paraTopics = topicsName.split(",");
 
 		if(qos < 0 || qos > 2) {
-			logger.severe("Specified invalid QoS value, set to default QoS value " + qos);
+			if (logger.isLoggable(Level.SEVERE)) {
+				logger.severe("Specified invalid QoS value, set to default QoS value " + qos);
+			}
 			qos = QOS_0;
 		}
 		connection.subscribe(paraTopics, MQTTQoS.fromValue(qos), () -> {
